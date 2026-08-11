@@ -1,10 +1,10 @@
 import { checkSecret, env } from '../lib/env.js';
-import { initSchema } from '../lib/db.js';
 import { setCommands, setWebhook } from '../lib/telegram.js';
+import { command } from '../lib/redis.js';
 
 /**
- * Одноразова ініціалізація: створює таблиці, реєструє вебхук і меню команд.
- * Відкрий у браузері після деплою:
+ * Одноразова ініціалізація: реєструє вебхук, меню команд і перевіряє,
+ * що Redis узагалі відповідає.
  *   https://<проєкт>.vercel.app/api/setup?key=<CRON_SECRET>
  */
 export default async function handler(req, res) {
@@ -20,12 +20,15 @@ export default async function handler(req, res) {
   const webhookUrl = `https://${host}/api/telegram`;
 
   try {
-    await initSchema();
+    const pong = await command('ping');
     await setWebhook(webhookUrl, env.cronSecret || undefined);
     await setCommands();
+
     res.status(200).json({
       ok: true,
       webhook: webhookUrl,
+      redis: pong,
+      inviteCode: env.inviteCode ? 'увімкнено' : 'ВИМКНЕНО — бот відкритий для всіх',
       hint: 'Тепер напиши боту /start у Telegram.',
     });
   } catch (error) {
