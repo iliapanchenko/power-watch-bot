@@ -4,6 +4,7 @@
  *   node scripts/status-test.mjs
  */
 import { applyProbe, closeDay, emptyState } from '../lib/status.js';
+import { humanDuration, humanDurationOrZero } from '../lib/format.js';
 
 const T = { failThreshold: 2, okThreshold: 2 };
 const SEC = 1000;
@@ -113,6 +114,57 @@ expect(
   Math.round(nextDay.state.downToday / 3600),
   1
 );
+
+// --- баланс доби: було + не було = під наглядом -----------------------------
+
+const fullDay = closeDay(
+  {
+    ...emptyState(),
+    status: 'up',
+    dayStart: 24 * HOUR,
+    downToday: (2 * HOUR) / SEC,
+  },
+  48 * HOUR
+);
+expect('за добу без світла було 2 години', fullDay.downSec / 3600, 2);
+expect('решта доби — зі світлом', fullDay.upSec / 3600, 22);
+expect('сума сходиться з часом під наглядом', fullDay.upSec + fullDay.downSec, fullDay.trackedSec);
+
+// Точку додали ополудні — вигаданої темряви за ранок бути не повинно.
+const partial = closeDay(
+  { ...emptyState(), status: 'up', dayStart: 45 * HOUR, downToday: 0 },
+  48 * HOUR
+);
+expect('неповна перша доба рахується від моменту додавання', partial.upSec / 3600, 3);
+expect('і жодної вигаданої темряви', partial.downSec, 0);
+expect('новий день відлічується від підсумку', partial.state.dayStart, 48 * HOUR);
+
+// --- слова й відмінки -------------------------------------------------------
+
+const durations = [
+  [30, 'менше хвилини'],
+  [60, '1 хвилину'],
+  [120, '2 хвилини'],
+  [300, '5 хвилин'],
+  [21 * 60, '21 хвилину'],
+  [11 * 60, '11 хвилин'],
+  [HOUR / SEC, '1 годину'],
+  [(2 * HOUR) / SEC, '2 години'],
+  [(5 * HOUR) / SEC, '5 годин'],
+  [(11 * HOUR) / SEC, '11 годин'],
+  [(21 * HOUR + 35 * MIN) / SEC, '21 годину 35 хвилин'],
+  [86400, '1 день'],
+  [2 * 86400, '2 дні'],
+  [5 * 86400, '5 днів'],
+  [53 * 86400 + 9 * 3600 + 55 * 60, '53 дні 9 годин 55 хвилин'],
+];
+
+for (const [seconds, want] of durations) {
+  expect(`${seconds} с -> «${want}»`, humanDuration(seconds), want);
+}
+
+expect('нуль у звіті — «0 хвилин»', humanDurationOrZero(0), '0 хвилин');
+expect('півхвилини у звіті теж «0 хвилин»', humanDurationOrZero(30), '0 хвилин');
 
 // --- лічильники не ростуть безмежно ----------------------------------------
 
