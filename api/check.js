@@ -89,7 +89,7 @@ async function runCycle(world, devices, once) {
         const byChat = await sweep(world);
 
         if (byChat.size > 0) {
-          await notify(byChat);
+          await notify(byChat, world);
           // Записуємо одразу після сповіщення, а не в кінці виклику: якщо
           // функція впаде посередині, наступна не надішле те саме вдруге.
           await saveStatus(world.status);
