@@ -1,0 +1,17 @@
+{
+  "name": "power-watch-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram bot that watches devices by TCP probe and reports power outages",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
+  }
+}
