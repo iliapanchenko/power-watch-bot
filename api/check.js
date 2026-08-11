@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions';
 import { checkSecret, env } from '../lib/env.js';
 import { acquireLock, releaseLock, saveStatus } from '../lib/store.js';
 import {
@@ -28,11 +29,57 @@ export default async function handler(req, res) {
     return;
   }
 
+  let world;
   try {
-    const world = await loadWorld();
+    world = await loadWorld();
     pruneStatus(world);
-    const devices = countDevices(world);
+  } catch (error) {
+    await releaseLock().catch(() => {});
+    console.error('[check] не вдалось прочитати стан', error);
+    res.status(500).json({ ok: false, error: String(error.message) });
+    return;
+  }
 
+  const devices = countDevices(world);
+  const work = runCycle(world, devices, once);
+
+  if (once) {
+    // Ручний запуск: чекаємо результат, щоб було що подивитись.
+    const sweeps = await work;
+    res.status(200).json({
+      ok: true,
+      mode: 'sync',
+      chats: world.chats.length,
+      devices,
+      sweeps: sweeps.length,
+      tookMs: Date.now() - startedAt,
+      detail: sweeps,
+    });
+    return;
+  }
+
+  /*
+   * Плановий запуск відповідає одразу, а проходи доганяє у фоні.
+   *
+   * Причина приземлена: у безкоштовного cron-job.org таймаут запиту 30
+   * секунд, а виклик живе 55. Тримали б з'єднання — кожен запуск
+   * рахувався б як провалений, і планувальник зрештою вимкнув би задачу.
+   * waitUntil дозволяє віддати відповідь і продовжити роботу.
+   */
+  waitUntil(work);
+
+  res.status(200).json({
+    ok: true,
+    mode: 'background',
+    chats: world.chats.length,
+    devices,
+    plannedSweeps: devices === 0 ? 1 : Math.ceil(env.maxRunSeconds / env.sweepInterval),
+    tookMs: Date.now() - startedAt,
+  });
+}
+
+async function runCycle(world, devices, once) {
+  try {
     const sweeps = await runSweeps({
       intervalMs: env.sweepInterval * 1000,
       budgetMs: env.maxRunSeconds * 1000,
@@ -66,19 +113,10 @@ export default async function handler(req, res) {
     // Лічильники гістерезису змінюються щопроходу, тож зберігаємо в кінці
     // навіть тоді, коли статуси нікуди не рухались.
     if (devices > 0) await saveStatus(world.status);
-
-    res.status(200).json({
-      ok: true,
-      chats: world.chats.length,
-      devices,
-      sweeps: sweeps.length,
-      intervalSec: env.sweepInterval,
-      tookMs: Date.now() - startedAt,
-      detail: sweeps,
-    });
+    return sweeps;
   } catch (error) {
     console.error('[check]', error);
-    res.status(500).json({ ok: false, error: String(error.message) });
+    return [];
   } finally {
     await releaseLock().catch(() => {});
   }
