@@ -13,6 +13,18 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Без токена Telegram відповів би 404 на неіснуючий шлях /bot/setWebhook,
+  // і причина була б неочевидна.
+  if (!env.token) {
+    res.status(500).json({
+      ok: false,
+      error:
+        'Не заданий BOT_TOKEN. Додай його у Vercel → Settings → Environment ' +
+        'Variables (Production) і зроби Redeploy — змінні підхоплюються лише при збірці.',
+    });
+    return;
+  }
+
   const host =
     process.env.VERCEL_PROJECT_PRODUCTION_URL ??
     req.headers['x-forwarded-host'] ??
