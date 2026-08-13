@@ -42,6 +42,8 @@ function redis([cmd, ...args]) {
 
 /** Ким прикидається той, хто натиснув. Міняється по ходу сценарію. */
 let memberStatus = 'administrator';
+/** Чи має бот право видаляти повідомлення в цьому чаті. */
+let canDelete = true;
 const events = [];
 
 function telegram(method, payload) {
@@ -53,6 +55,10 @@ function telegram(method, payload) {
     case 'editMessageText':
       events.push({ edited: payload.text, keyboard: payload.reply_markup });
       return {};
+    case 'deleteMessage':
+      if (!canDelete) return { error: 'not enough rights to delete a message' };
+      events.push({ deleted: payload.message_id });
+      return true;
     case 'sendMessage': return {};
     default: throw new Error(`підроблений Telegram не вміє ${method}`);
   }
@@ -64,7 +70,12 @@ globalThis.fetch = async (url, init) => {
 
   if (target.includes('api.telegram.org')) {
     const method = target.split('/').pop();
-    return { ok: true, json: async () => ({ ok: true, result: telegram(method, body) }) };
+    const result = telegram(method, body);
+    // Так само, як справжній Bot API: відмова приходить у тілі відповіді.
+    const payload = result?.error
+      ? { ok: false, error_code: 400, description: result.error }
+      : { ok: true, result };
+    return { ok: true, status: 200, json: async () => payload };
   }
 
   const payload = target.endsWith('/pipeline')
@@ -119,26 +130,36 @@ show('/settings', await say('/settings'));
 console.log('\n\x1b[2m── натискання «спокійний» адміністратором ──────\x1b[0m');
 for (const event of await press('mode:спокійний')) {
   if (event.toast) console.log('  спливна підказка: ' + event.toast);
+  if (event.deleted) console.log('  екран видалено з чату');
+  if (event.edited) console.log('  ❌ екран лишився в чаті');
+}
+
+console.log('\n\x1b[2m── те саме, але бот не має права видаляти ──────\x1b[0m');
+canDelete = false;
+for (const event of await press('mode:швидкий')) {
+  if (event.toast) console.log('  спливна підказка: ' + event.toast);
+  if (event.deleted) console.log('  екран видалено з чату');
   if (event.edited) {
-    for (const line of plain(event.edited).split('\n')) console.log('  ' + line);
+    console.log('  видалити не вдалось, тому перемальовано:');
     for (const row of event.keyboard?.inline_keyboard ?? []) {
-      for (const button of row) console.log('  [ ' + button.text + ' ]');
+      for (const button of row) console.log('    [ ' + button.text + ' ]');
     }
   }
 }
+canDelete = true;
 
 console.log('\n\x1b[2m── те саме натискає підписник каналу ───────────\x1b[0m');
 memberStatus = 'member';
 for (const event of await press('mode:швидкий', STRANGER)) {
   if (event.toast) console.log('  спливна підказка: ' + event.toast);
-  if (event.edited) console.log('  ❌ повідомлення перемальовано, а не мало б');
+  if (event.edited || event.deleted) console.log('  ❌ екран змінено, а не мав би');
 }
 memberStatus = 'administrator';
 
 console.log('\n\x1b[2m── /tempo натискає не власник бота ─────────────\x1b[0m');
 for (const event of await press('tempo:частий', STRANGER)) {
   if (event.toast) console.log('  спливна підказка: ' + event.toast);
-  if (event.edited) console.log('  ❌ темп змінено, а не мав би');
+  if (event.edited || event.deleted) console.log('  ❌ темп змінено, а не мав би');
 }
 
 console.log('\n\x1b[2m── /tempo натискає власник ─────────────────────\x1b[0m');
