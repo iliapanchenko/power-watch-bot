@@ -16,7 +16,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  const message = req.body?.message;
+  // У каналах команда приходить як channel_post, а не message.
+  const message = req.body?.message ?? req.body?.channel_post;
   if (!message?.chat?.id) {
     res.status(200).json({ ok: true });
     return;
