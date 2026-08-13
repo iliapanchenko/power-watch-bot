@@ -10,6 +10,7 @@ import {
   countDevices,
 } from '../lib/monitor.js';
 import { runSweeps } from '../lib/sweep.js';
+import { tempoSeconds } from '../lib/presets.js';
 
 export const config = { maxDuration: 60 };
 
@@ -41,7 +42,8 @@ export default async function handler(req, res) {
   }
 
   const devices = countDevices(world);
-  const work = runCycle(world, devices, once);
+  const intervalSec = tempoSeconds(world.settings.tempo);
+  const work = runCycle(world, devices, once, intervalSec);
 
   if (once) {
     // Ручний запуск: чекаємо результат, щоб було що подивитись.
@@ -51,6 +53,8 @@ export default async function handler(req, res) {
       mode: 'sync',
       chats: world.chats.length,
       devices,
+      tempo: world.settings.tempo ?? null,
+      intervalSec,
       sweeps: sweeps.length,
       tookMs: Date.now() - startedAt,
       detail: sweeps,
@@ -73,15 +77,17 @@ export default async function handler(req, res) {
     mode: 'background',
     chats: world.chats.length,
     devices,
-    plannedSweeps: devices === 0 ? 1 : Math.ceil(env.maxRunSeconds / env.sweepInterval),
+    tempo: world.settings.tempo ?? null,
+    intervalSec,
+    plannedSweeps: devices === 0 ? 1 : Math.ceil(env.maxRunSeconds / intervalSec),
     tookMs: Date.now() - startedAt,
   });
 }
 
-async function runCycle(world, devices, once) {
+async function runCycle(world, devices, once, intervalSec) {
   try {
     const sweeps = await runSweeps({
-      intervalMs: env.sweepInterval * 1000,
+      intervalMs: intervalSec * 1000,
       budgetMs: env.maxRunSeconds * 1000,
       once,
       shouldStop: (result) => result.devices === 0,
