@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["fra1"],
   "functions": {
-    "api/check.js": { "maxDuration": 60, "memory": 256 },
-    "api/telegram.js": { "maxDuration": 20, "memory": 256 },
-    "api/setup.js": { "maxDuration": 20, "memory": 256 }
+    "api/check.js": { "maxDuration": 60, "memory": 128 },
+    "api/telegram.js": { "maxDuration": 20, "memory": 128 },
+    "api/setup.js": { "maxDuration": 20, "memory": 128 }
   }
 }
