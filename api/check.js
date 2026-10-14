@@ -10,6 +10,7 @@ import {
   countDevices,
 } from '../lib/monitor.js';
 import { runSweeps } from '../lib/sweep.js';
+import { runSchedules } from '../lib/schedule-runner.js';
 import { tempoSeconds } from '../lib/presets.js';
 
 export const config = { maxDuration: 60 };
@@ -116,9 +117,18 @@ async function runCycle(world, devices, once, intervalSec) {
       },
     });
 
+    // Графіки — раз на виклик і після проходів: завантаження файлу з GitHub
+    // не зсуває сітку перевірок і не з'їдає їхній бюджет часу.
+    let schedulesChanged = false;
+    try {
+      schedulesChanged = await runSchedules(world);
+    } catch (error) {
+      console.error('[schedule]', error);
+    }
+
     // Лічильники гістерезису змінюються щопроходу, тож зберігаємо в кінці
     // навіть тоді, коли статуси нікуди не рухались.
-    if (devices > 0) await saveStatus(world.status);
+    if (devices > 0 || schedulesChanged) await saveStatus(world.status);
     return sweeps;
   } catch (error) {
     console.error('[check]', error);

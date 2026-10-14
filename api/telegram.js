@@ -1,7 +1,7 @@
 import { env } from '../lib/env.js';
 import { handleMessage } from '../lib/commands.js';
 import { handleCallback } from '../lib/callbacks.js';
-import { sendMessage } from '../lib/telegram.js';
+import { deleteMessage, sendMessage } from '../lib/telegram.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -28,6 +28,23 @@ export default async function handler(req, res) {
   res.status(200).json({ ok: true });
 }
 
+/**
+ * Кожне закріплення Telegram супроводжує службовим «закріпив повідомлення».
+ * Графік оновлюється кілька разів на добу, і без прибирання чат за тиждень
+ * перетворився б на стрічку таких рядків.
+ *
+ * Прибираємо лише рядки про закріплений графік, упізнаючи його за першими
+ * словами. Не «все, що закріпив бот»: якщо людина сама закріпить, скажімо,
+ * сповіщення про відключення, це її рішення, і чіпати його не нам.
+ */
+async function dropOwnPinNotice(message) {
+  const pinnedText = String(message.pinned_message.text ?? '');
+  if (!pinnedText.startsWith('Графік відключень')) return;
+
+  // Без права видаляти повідомлення рядок просто лишиться — не біда.
+  await deleteMessage(message.chat.id, message.message_id).catch(() => {});
+}
+
 async function route(update) {
   if (update.callback_query) {
     await handleCallback(update.callback_query);
@@ -37,6 +54,11 @@ async function route(update) {
   // У каналах команда приходить як channel_post, а не message.
   const message = update.message ?? update.channel_post;
   if (!message?.chat?.id) return;
+
+  if (message.pinned_message) {
+    await dropOwnPinNotice(message);
+    return;
+  }
 
   try {
     const reply = await handleMessage(message);
