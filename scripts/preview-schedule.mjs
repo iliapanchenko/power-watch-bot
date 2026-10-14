@@ -28,7 +28,8 @@ globalThis.fetch = async (url, init) => {
     if (method === 'sendMessage') {
       result = { message_id: nextId++ };
       chat.push({ id: result.message_id, text: body.text });
-      log(`надіслано #${result.message_id}` + (body.text.startsWith('⏰') ? ': ' + plain(body.text).split('\n')[0] : ''));
+      const sound = body.disable_notification ? ' беззвучно' : '';
+      log(`надіслано${sound} #${result.message_id}` + (body.text.startsWith('⏰') ? ': ' + plain(body.text).split('\n')[0] : ''));
     } else if (method === 'pinChatMessage') log(`закріплено #${body.message_id}`);
     else if (method === 'unpinChatMessage') log(`відкріплено #${body.message_id}`);
     else if (method === 'deleteMessage') log(`видалено #${body.message_id}`);
