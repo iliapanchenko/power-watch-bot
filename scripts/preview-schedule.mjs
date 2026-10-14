@@ -29,7 +29,7 @@ globalThis.fetch = async (url, init) => {
       result = { message_id: nextId++ };
       chat.push({ id: result.message_id, text: body.text });
       const sound = body.disable_notification ? ' беззвучно' : '';
-      log(`надіслано${sound} #${result.message_id}` + (body.text.startsWith('⏰') ? ': ' + plain(body.text).split('\n')[0] : ''));
+      log(`надіслано${sound} #${result.message_id}` + (/^[⏰🚨✅]/u.test(body.text) ? ': ' + plain(body.text).split('\n')[0] : ''));
     } else if (method === 'pinChatMessage') log(`закріплено #${body.message_id}`);
     else if (method === 'unpinChatMessage') log(`відкріплено #${body.message_id}`);
     else if (method === 'deleteMessage') log(`видалено #${body.message_id}`);
@@ -84,18 +84,32 @@ if (upcoming) {
   await step('хвилиною пізніше, попередження вже було', upcoming.start - 24 * 60000);
 }
 
-// ДТЕК публікує графік на завтра: дописуємо день у дані, як це зробило б дзеркало.
-const cache = world.schedules.kyiv;
-cache.days.push({
+// Далі дані підставляємо самі. Бот при кожному оновленні замінює об'єкт
+// графіка новим, тому звертаємось до нього щоразу заново, а мітки часу
+// ставимо свіжими, щоб бот не пішов по справжні дані й не затер підставлене.
+const live = () => world.schedules.kyiv;
+const freeze = (time, status) => {
+  live().fetchedAt = time;
+  live().status = { fetchedAt: time, groups: { '4.1': status } };
+};
+
+// ДТЕК публікує графік на завтра: дописуємо день, як це зробило б дзеркало.
+live().days.push({
   date: new Date(today + 36 * 3600 * 1000).toISOString().slice(0, 10),
   start: today + 24 * 3600 * 1000,
   groups: { '4.1': 'yyyyyyyynnnyyyyyyyyyyyyy' },
 });
-cache.fetchedAt = at(20, 0);
+freeze(at(20, 0), 'EmergencyShutdowns');
 await step('20:00, з\'явився графік на завтра', at(20, 0));
 console.log('\n' + plain(chat.at(-1).text).replace(/^/gm, '  │ '));
 
-cache.fetchedAt = at(24, 1);
+freeze(at(22, 0), 'ScheduleApplies');
+await step('22:00, Yasno: екстрені відключення скасовано', at(22, 0));
+
+freeze(at(23, 0), 'EmergencyShutdowns');
+await step('23:00, Yasno: екстрені відключення знову', at(23, 0));
+
+freeze(at(24, 1), 'EmergencyShutdowns');
 await step('00:01, настала північ', at(24, 1));
 
 world.chats[0].schedule = null;

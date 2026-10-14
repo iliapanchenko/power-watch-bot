@@ -8,6 +8,8 @@ import {
   classifyChange,
   dayIntervals,
   dueWarnings,
+  EMERGENCY,
+  emergencyEvent,
   encodeDay,
   formatMinutes,
   kyivLocalToMs,
@@ -15,6 +17,7 @@ import {
   overlapSeconds,
   parseAddress,
   pickStreet,
+  renderEmergency,
   renderSchedule,
   scheduleSnapshot,
 } from '../lib/schedule.js';
@@ -150,6 +153,26 @@ expect('у графіку видно, на котру ДТЕК його опуб
 expect('свіжі дані — без попередження', text.includes('⚠️'), false);
 const stale = renderSchedule({ group: '4.1', snapshot, cache, now: at(16, 31) + 8 * 3600 * 1000 });
 expect('дані старші за 6 годин — попередження', stale.includes('⚠️ Джерело не оновлювалось'), true);
+
+// --- екстрені відключення ---------------------------------------------------
+
+expect('уперше бачимо, а екстрені вже тривають', emergencyEvent(undefined, EMERGENCY), 'active');
+expect('уперше бачимо, звичайний режим — мовчимо', emergencyEvent(undefined, 'ScheduleApplies'), null);
+expect('почались', emergencyEvent('ScheduleApplies', EMERGENCY), 'started');
+expect('скінчились', emergencyEvent(EMERGENCY, 'ScheduleApplies'), 'ended');
+expect('скінчились, хоч слово й невідоме заздалегідь', emergencyEvent(EMERGENCY, 'WhateverYasnoSays'), 'ended');
+expect('тривають далі — мовчимо', emergencyEvent(EMERGENCY, EMERGENCY), null);
+expect('Yasno не відповів — це не скасування', emergencyEvent(EMERGENCY, null), null);
+
+expect(
+  'текст про скасування — як попросили',
+  renderEmergency('ended', 'Києві'),
+  '✅ Екстрені відключення скасовано\nВідключення відбуваються за графіком'
+);
+expect('текст про початок', renderEmergency('started', 'Києві').split('\n')[0], '🚨 У Києві почались екстрені відключення');
+
+const withEmergency = renderSchedule({ group: '4.1', snapshot, cache, emergency: true, now: at(16, 45) });
+expect('у закріпленому рядок про екстрені — одразу під заголовком', withEmergency.split('\n\n')[1], '🚨 Зараз діють екстрені відключення, графік може не виконуватись');
 
 // --- звіт дня ---------------------------------------------------------------
 
