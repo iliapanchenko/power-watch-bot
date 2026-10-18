@@ -150,6 +150,15 @@ expect('завтрашнього графіка ще нема', snapshot.days['2
 
 const text = renderSchedule({ group: '4.1', address: 'вул. Олеся Олександра, 2А', snapshot, cache, now: at(16, 45) });
 expect('у графіку видно, на котру ДТЕК його опублікував', text.includes('Дані ДТЕК на 14.10.2026 14:05'), true);
+expect('завтра не опубліковано — блоку «Завтра» нема зовсім', text.includes('Завтра'), false);
+
+const published = renderSchedule({
+  group: '4.1',
+  snapshot: { ...snapshot, days: { ...snapshot.days, '2026-10-15': 'yyyyyyyynnnyyyyyyyyyyyyy' } },
+  cache,
+  now: at(20, 0),
+});
+expect('графік на завтра з\'явився — блок є', published.includes('Завтра, 15 жовтня</b>\n⚫ 08:00–11:00'), true);
 expect('свіжі дані — без попередження', text.includes('⚠️'), false);
 const stale = renderSchedule({ group: '4.1', snapshot, cache, now: at(16, 31) + 8 * 3600 * 1000 });
 expect('дані старші за 6 годин — попередження', stale.includes('⚠️ Джерело не оновлювалось'), true);
