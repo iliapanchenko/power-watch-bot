@@ -97,11 +97,21 @@ expect(
   classifyChange(base, { ...base, days: { '2026-10-14': 'y'.repeat(24), '2026-10-15': '-' } }),
   'new'
 );
+const day = { ...base, phase: 'day' };
+const evening = { ...base, phase: 'evening', text: 'E' };
+expect('23:45 → новий допис «на завтра» зі звуком', classifyChange(day, evening), 'new');
+expect('23:46 → уже надіслали, нічого', classifyChange(evening, { ...evening }), 'none');
 expect(
-  'північ: нового графіка нема → новий допис без звуку',
-  classifyChange(base, { ...base, days: { '2026-10-15': '-', '2026-10-16': '-' }, text: 'C' }),
-  'quiet'
+  'північ після вечірнього допису → тихо переписати «Завтра» на «Сьогодні»',
+  classifyChange(evening, { ...base, phase: 'day', days: { '2026-10-15': '-', '2026-10-16': '-' }, text: 'C' }),
+  'edit'
 );
+expect(
+  'північ без вечірнього допису (бот лежав) → теж лише переписати',
+  classifyChange(day, { ...day, days: { '2026-10-15': '-', '2026-10-16': '-' }, text: 'C' }),
+  'edit'
+);
+expect('старий стан без позначки фази → о 23:45 новий допис', classifyChange(base, evening), 'new');
 expect(
   'північ, а ДТЕК саме змінив години на сьогодні → новий допис зі звуком',
   classifyChange(
@@ -147,6 +157,19 @@ const cache = { lastUpdated: new Date(at(16, 31)).toISOString(), dtekUpdate: '14
 const snapshot = scheduleSnapshot(cache, '4.1', at(16, 45));
 expect('сьогодні й завтра за Києвом', [snapshot.today, snapshot.tomorrow], ['2026-10-14', '2026-10-15']);
 expect('завтрашнього графіка ще нема', snapshot.days['2026-10-15'], '-');
+expect('о 16:45 — денна фаза', snapshot.phase, 'day');
+expect('о 23:44 — ще денна', scheduleSnapshot(cache, '4.1', at(23, 44)).phase, 'day');
+expect('о 23:45 — вечірня', scheduleSnapshot(cache, '4.1', at(23, 45)).phase, 'evening');
+
+const eveningText = renderSchedule({
+  group: '4.1',
+  snapshot: scheduleSnapshot(cache, '4.1', at(23, 45)),
+  cache,
+  now: at(23, 45),
+});
+expect('увечері заголовок «на завтра»', eveningText.startsWith('<b>Графік відключень на завтра, група 4.1</b>'), true);
+expect('увечері лише завтрашній день', [eveningText.includes('Сьогодні'), eveningText.includes('Завтра, 15 жовтня')], [false, true]);
+expect('увечері «ще не опублікований» доречний', eveningText.includes('Графік ще не опублікований'), true);
 
 const text = renderSchedule({ group: '4.1', address: 'вул. Олеся Олександра, 2А', snapshot, cache, now: at(16, 45) });
 expect('у графіку видно, на котру ДТЕК його опублікував', text.includes('Дані ДТЕК на 14.10.2026 14:05'), true);

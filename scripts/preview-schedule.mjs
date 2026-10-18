@@ -109,6 +109,13 @@ await step('22:00, Yasno: екстрені відключення скасова
 freeze(at(23, 0), 'EmergencyShutdowns');
 await step('23:00, Yasno: екстрені відключення знову', at(23, 0));
 
+freeze(at(23, 45), 'EmergencyShutdowns');
+await step('23:45, графік на завтра', at(23, 45));
+console.log('\n' + plain(chat.at(-1).text).replace(/^/gm, '  │ '));
+
+freeze(at(23, 50), 'EmergencyShutdowns');
+await step('23:50, вечірній допис уже був', at(23, 50));
+
 freeze(at(24, 1), 'EmergencyShutdowns');
 await step('00:01, настала північ', at(24, 1));
 
