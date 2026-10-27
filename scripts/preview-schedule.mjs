@@ -50,6 +50,7 @@ const { runSchedules } = await import('../lib/schedule-runner.js');
 const { kyivLocalToMs, absoluteIntervals } = await import('../lib/schedule.js');
 
 const plain = (html) => html.replace(/<\/?(b|i)>/g, '');
+const lastSchedule = () => chat.filter((m) => m.text.startsWith('<b>Графік')).at(-1).text;
 let clock = '';
 const log = (line) => console.log(`  ${clock}  ${line}`);
 
@@ -73,7 +74,7 @@ const today = Number(Object.keys(JSON.parse(await (await realFetch(
 const at = (h, m = 0) => kyivLocalToMs(today, h * 60 + m);
 
 await step('16:00, адресу щойно вказали', at(16, 0));
-console.log('\n' + plain(chat.at(-1).text).replace(/^/gm, '  │ '));
+console.log('\n' + plain(lastSchedule()).replace(/^/gm, '  │ '));
 
 await step('16:10, наступна перевірка', at(16, 10));
 
@@ -101,7 +102,7 @@ live().days.push({
 });
 freeze(at(20, 0), 'EmergencyShutdowns');
 await step('20:00, з\'явився графік на завтра', at(20, 0));
-console.log('\n' + plain(chat.at(-1).text).replace(/^/gm, '  │ '));
+console.log('\n' + plain(lastSchedule()).replace(/^/gm, '  │ '));
 
 freeze(at(22, 0), 'ScheduleApplies');
 await step('22:00, Yasno: екстрені відключення скасовано', at(22, 0));
@@ -111,7 +112,7 @@ await step('23:00, Yasno: екстрені відключення знову', a
 
 freeze(at(23, 45), 'EmergencyShutdowns');
 await step('23:45, графік на завтра', at(23, 45));
-console.log('\n' + plain(chat.at(-1).text).replace(/^/gm, '  │ '));
+console.log('\n' + plain(lastSchedule()).replace(/^/gm, '  │ '));
 
 freeze(at(23, 50), 'EmergencyShutdowns');
 await step('23:50, вечірній допис уже був', at(23, 50));

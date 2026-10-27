@@ -182,6 +182,30 @@ const published = renderSchedule({
   now: at(20, 0),
 });
 expect('графік на завтра з\'явився — блок є', published.includes('Завтра, 15 жовтня</b>\n⚫ 08:00–11:00'), true);
+
+// Сьогодні — лише те, що попереду. Графік дня: 00:00–00:30 і 17:00–20:30.
+const withTomorrow = { ...snapshot, days: { ...snapshot.days, '2026-10-15': 'yyyyyyyynnnyyyyyyyyyyyyy' } };
+const render = (h, m, snap) => renderSchedule({ group: '4.1', snapshot: snap, cache, now: at(h, m) });
+
+const afternoon = render(16, 45, snapshot);
+expect('о 16:45 нічного 00:00–00:30 уже нема', afternoon.includes('00:00–00:30'), false);
+expect('о 16:45 вечірнє 17:00–20:30 є', afternoon.includes('17:00–20:30'), true);
+expect('частина дня позаду — «Ще без світла»', afternoon.includes('Ще без світла 3 години 30 хвилин'), true);
+
+const during = render(18, 0, withTomorrow);
+expect('о 18:00 відключення триває — сьогодні ще показуємо', during.includes('Сьогодні'), true);
+expect('…а «ще без світла» рахується від зараз: до 20:30 лишилось 2.5 год', during.includes('Ще без світла 2 години 30 хвилин'), true);
+
+const lateWithTomorrow = render(21, 0, withTomorrow);
+expect('о 21:00 сьогодні все позаду, а завтра є — «Сьогодні» не показуємо', lateWithTomorrow.includes('Сьогодні'), false);
+expect('…і лишається лише завтра', lateWithTomorrow.includes('Завтра, 15 жовтня'), true);
+
+const lateNoTomorrow = render(21, 0, snapshot);
+expect(
+  'о 21:00 без графіка на завтра — пишемо, що більше нічого не буде',
+  lateNoTomorrow.includes('⚡ Більше відключень сьогодні не заплановано'),
+  true
+);
 expect('свіжі дані — без попередження', text.includes('⚠️'), false);
 const stale = renderSchedule({ group: '4.1', snapshot, cache, now: at(16, 31) + 8 * 3600 * 1000 });
 expect('дані старші за 6 годин — попередження', stale.includes('⚠️ Джерело не оновлювалось'), true);
