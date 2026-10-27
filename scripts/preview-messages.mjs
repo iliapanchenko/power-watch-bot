@@ -52,6 +52,39 @@ show(
 );
 
 show(
+  'зникло за графіком',
+  renderTransition({
+    device: { name: 'Варшавський' },
+    to: 'down',
+    at,
+    durationSec: 6 * HOUR,
+    cause: { kind: 'scheduled', until: at + 3.5 * HOUR * 1000 },
+  })
+);
+
+show(
+  'зникло поза графіком',
+  renderTransition({
+    device: { name: 'Варшавський' },
+    to: 'down',
+    at,
+    durationSec: 3 * HOUR,
+    cause: { kind: 'unscheduled' },
+  })
+);
+
+show(
+  'зникло під час екстрених відключень',
+  renderTransition({
+    device: { name: 'Варшавський' },
+    to: 'down',
+    at,
+    durationSec: 2 * HOUR,
+    cause: { kind: 'emergency' },
+  })
+);
+
+show(
   'перше відключення, попереднього стану ще не було',
   renderTransition({ device: { name: 'Дача' }, to: 'down', at, durationSec: null })
 );

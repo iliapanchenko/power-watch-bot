@@ -6,6 +6,7 @@
 import {
   absoluteIntervals,
   classifyChange,
+  classifyOutage,
   dayIntervals,
   dueWarnings,
   EMERGENCY,
@@ -21,7 +22,7 @@ import {
   renderSchedule,
   scheduleSnapshot,
 } from '../lib/schedule.js';
-import { renderScheduleSplit } from '../lib/messages.js';
+import { renderCause, renderScheduleSplit } from '../lib/messages.js';
 
 let failures = 0;
 function expect(label, actual, expected) {
@@ -229,6 +230,29 @@ expect('текст про початок', renderEmergency('started', 'Києв�
 
 const withEmergency = renderSchedule({ group: '4.1', snapshot, cache, emergency: true, now: at(16, 45) });
 expect('у закріпленому рядок про екстрені — одразу під заголовком', withEmergency.split('\n\n')[1], '🚨 Зараз діють екстрені відключення, графік може не виконуватись');
+
+// --- звідки зникло світло ----------------------------------------------------
+
+const offToday = absoluteIntervals(days, '4.1', 'off'); // 00:00–00:30 і 17:00–20:30
+const cause = (h, m, extra = {}) => classifyOutage({ off: offToday, maybe: [], emergency: false, now: at(h, m), ...extra });
+
+expect('о 17:01 — за графіком, до 20:30', cause(17, 1), { kind: 'scheduled', until: at(20, 30) });
+expect('о 16:55 — ДТЕК вимкнув на 5 хв раніше, все одно за графіком', cause(16, 55).kind, 'scheduled');
+expect('о 16:40 — це вже не «трохи раніше», а поза графіком', cause(16, 40).kind, 'unscheduled');
+expect('о 12:00 — поза графіком', cause(12, 0).kind, 'unscheduled');
+expect('о 20:30 рівно — графік уже скінчився', cause(20, 30).kind, 'unscheduled');
+expect('екстрені важать більше за графік', cause(17, 1, { emergency: true }).kind, 'emergency');
+expect('графіка нема зовсім — нічого не стверджуємо', classifyOutage({ off: null, maybe: null, emergency: false, now: at(12, 0) }), null);
+
+const night = [{ start: at(22, 0), end: at(24, 0) }, { start: at(24, 0), end: at(26, 0) }];
+expect('проміжки через північ злипаються: до 02:00', classifyOutage({ off: night, now: at(23, 0) }).until, at(26, 0));
+
+const maybeIntervals = [{ start: at(9, 0), end: at(10, 0) }];
+expect('«можливе» відключення', classifyOutage({ off: [], maybe: maybeIntervals, now: at(9, 5) }), { kind: 'maybe', until: at(10, 0) });
+
+expect('рядок для планового', renderCause({ kind: 'scheduled', until: at(20, 30) }), '📅 За графіком, світло мають повернути о 20:30');
+expect('рядок для аварії', renderCause({ kind: 'unscheduled' }), '⚠️ Поза графіком — схоже на аварію чи ремонтні роботи');
+expect('без причини — без рядка', renderCause(null), null);
 
 // --- звіт дня ---------------------------------------------------------------
 
