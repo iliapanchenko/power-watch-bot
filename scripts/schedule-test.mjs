@@ -20,6 +20,8 @@ import {
   pickStreet,
   renderEmergency,
   renderSchedule,
+  renderScheduleChange,
+  scheduleChanges,
   scheduleSnapshot,
 } from '../lib/schedule.js';
 import { renderCause, renderScheduleSplit } from '../lib/messages.js';
@@ -87,16 +89,11 @@ const base = { messageId: 10, group: '4.1', days: { '2026-10-14': code, '2026-10
 expect('ще нічого не закріплено → новий допис', classifyChange(undefined, base), 'new');
 expect('змінилась група → новий допис', classifyChange(base, { ...base, group: '5.1' }), 'new');
 expect('нічого не змінилось → нічого', classifyChange(base, { ...base }), 'none');
-expect('змінилась лише примітка → тихо переписати', classifyChange(base, { ...base, text: 'B' }), 'edit');
+expect('змінився текст → тихо переписати', classifyChange(base, { ...base, text: 'B' }), 'edit');
 expect(
-  'з\'явився графік на завтра → новий допис',
-  classifyChange(base, { ...base, days: { '2026-10-14': code, '2026-10-15': 'y'.repeat(24) } }),
-  'new'
-);
-expect(
-  'ДТЕК змінив сьогоднішній графік → новий допис',
-  classifyChange(base, { ...base, days: { '2026-10-14': 'y'.repeat(24), '2026-10-15': '-' } }),
-  'new'
+  'ДТЕК змінив години → закріплене лише переписати',
+  classifyChange(base, { ...base, days: { '2026-10-14': 'y'.repeat(24), '2026-10-15': '-' }, text: 'B' }),
+  'edit'
 );
 const day = { ...base, phase: 'day' };
 const evening = { ...base, phase: 'evening', text: 'E' };
@@ -107,26 +104,64 @@ expect(
   classifyChange(evening, { ...base, phase: 'day', days: { '2026-10-15': '-', '2026-10-16': '-' }, text: 'C' }),
   'edit'
 );
-expect(
-  'північ без вечірнього допису (бот лежав) → теж лише переписати',
-  classifyChange(day, { ...day, days: { '2026-10-15': '-', '2026-10-16': '-' }, text: 'C' }),
-  'edit'
-);
 expect('старий стан без позначки фази → о 23:45 новий допис', classifyChange(base, evening), 'new');
-expect(
-  'північ, а ДТЕК саме змінив години на сьогодні → новий допис зі звуком',
-  classifyChange(
-    { ...base, days: { '2026-10-14': code, '2026-10-15': 'y'.repeat(24) } },
-    { ...base, days: { '2026-10-15': 'n'.repeat(24), '2026-10-16': '-' }, text: 'C' }
-  ),
-  'new'
-);
-expect(
-  'північ, а на післязавтра графік уже є → новий допис',
-  classifyChange(base, { ...base, days: { '2026-10-15': '-', '2026-10-16': 'n'.repeat(24) }, text: 'C' }),
-  'new'
-);
 expect('закріплене видалили руками → новий допис', classifyChange({ ...base, messageId: null }, base), 'new');
+
+// --- окремі дописи про зміни -------------------------------------------------
+
+const daySnap = { today: '2026-10-14', tomorrow: '2026-10-15', phase: 'day' };
+const other = 'y'.repeat(17) + 'nnn' + 'y'.repeat(4);
+expect('перший показ → про зміни мовчимо', scheduleChanges(undefined, base, daySnap), []);
+expect('нічого не змінилось → мовчимо', scheduleChanges(base, { ...base }, daySnap), []);
+expect(
+  'змінились години на сьогодні',
+  scheduleChanges(base, { ...base, days: { '2026-10-14': other, '2026-10-15': '-' } }, daySnap),
+  [{ date: '2026-10-14', before: code, after: other }]
+);
+expect(
+  'опублікували графік на завтра',
+  scheduleChanges(base, { ...base, days: { '2026-10-14': code, '2026-10-15': other } }, daySnap),
+  [{ date: '2026-10-15', before: '-', after: other }]
+);
+expect(
+  'день зник із даних → це збій, не зміна',
+  scheduleChanges(
+    { ...base, days: { '2026-10-14': code, '2026-10-15': other } },
+    { ...base, days: { '2026-10-14': code, '2026-10-15': '-' } },
+    daySnap
+  ),
+  []
+);
+expect('змінилась група → це не зміна графіка', scheduleChanges(base, { ...base, group: '5.1', days: { '2026-10-14': other } }, daySnap), []);
+expect(
+  'північ, на новий день графіка ще нема → мовчимо',
+  scheduleChanges(base, { ...base, days: { '2026-10-15': '-', '2026-10-16': '-' } }, { today: '2026-10-15', tomorrow: '2026-10-16', phase: 'day' }),
+  []
+);
+expect(
+  'після 23:45 сьогоднішній день уже не цікавий',
+  scheduleChanges(
+    { ...base, days: { '2026-10-14': code, '2026-10-15': other } },
+    { ...base, days: { '2026-10-14': other, '2026-10-15': code } },
+    { ...daySnap, phase: 'evening' }
+  ),
+  [{ date: '2026-10-15', before: other, after: code }]
+);
+
+const changeText = renderScheduleChange({ group: '4.1', date: '2026-10-14', when: 'сьогодні', before: code, after: other });
+expect('заголовок допису про зміну', changeText.split('\n')[0], '<b>🔄 Зміни в графіку відключень на сьогодні, 14 жовтня</b>');
+expect('було й стало', changeText.includes('<b>Було:</b>\n⚫ 00:00–00:30') && changeText.includes('<b>Стало:</b>\n⚫ 17:00–20:00'), true);
+expect('Було — увесь день, разом з минулим', changeText.includes('<b>Було:</b>\n⚫ 00:00–00:30\n⚫ 17:00–20:30'), true);
+expect(
+  'зміну скасували',
+  renderScheduleChange({ group: '4.1', date: '2026-10-14', when: 'сьогодні', before: code, after: code }).split('\n\n')[1],
+  '↩️ Зміну скасовано, діє попередній графік'
+);
+expect(
+  'опубліковано графік на завтра',
+  renderScheduleChange({ group: '4.1', date: '2026-10-15', when: 'завтра', before: '-', after: 'y'.repeat(24) }),
+  '<b>📅 Опубліковано графік відключень на завтра, 15 жовтня</b>\nГрупа 4.1\n\n⚡ Відключень не заплановано'
+);
 
 // --- попередження -----------------------------------------------------------
 

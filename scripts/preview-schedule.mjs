@@ -29,11 +29,15 @@ globalThis.fetch = async (url, init) => {
       result = { message_id: nextId++ };
       chat.push({ id: result.message_id, text: body.text });
       const sound = body.disable_notification ? ' беззвучно' : '';
-      log(`надіслано${sound} #${result.message_id}` + (/^[⏰🚨✅]/u.test(body.text) ? ': ' + plain(body.text).split('\n')[0] : ''));
+      log(`надіслано${sound} #${result.message_id}` + (/^[⏰🚨✅🔄📅]/u.test(plain(body.text)) ? ': ' + plain(body.text).split('\n')[0] : ''));
     } else if (method === 'pinChatMessage') log(`закріплено #${body.message_id}`);
     else if (method === 'unpinChatMessage') log(`відкріплено #${body.message_id}`);
     else if (method === 'deleteMessage') log(`видалено #${body.message_id}`);
-    else if (method === 'editMessageText') log(`тихо переписано #${body.message_id}`);
+    else if (method === 'editMessageText') {
+      log(`тихо переписано #${body.message_id}`);
+      const message = chat.find((m) => m.id === body.message_id);
+      if (message) message.text = body.text;
+    }
     return { ok: true, status: 200, json: async () => ({ ok: true, result }) };
   }
 
@@ -94,6 +98,33 @@ const freeze = (time, status) => {
   live().status = { fetchedAt: time, groups: { '4.1': status } };
 };
 
+// ДТЕК змінює години на сьогодні, за 5 хвилин виправляє себе ще раз,
+// потім повертає як було, а за пів години змінює знову.
+const todayDay = () => live().days.find((day) => day.start === today);
+const original = todayDay().groups['4.1'];
+const lastChange = () => chat.filter((m) => /^<b>[🔄📅]/u.test(m.text)).at(-1).text;
+const showChange = () => console.log('\n' + plain(lastChange()).replace(/^/gm, '  │ '));
+
+todayDay().groups['4.1'] = 'y'.repeat(19) + 'nnn' + 'yy';
+freeze(at(19, 0), 'ScheduleApplies');
+await step('19:00, ДТЕК змінив години на сьогодні', at(19, 0));
+showChange();
+
+todayDay().groups['4.1'] = 'y'.repeat(19) + 'nnnn' + 'y';
+freeze(at(19, 5), 'ScheduleApplies');
+await step('19:05, і за 5 хвилин виправив себе', at(19, 5));
+showChange();
+
+todayDay().groups['4.1'] = original;
+freeze(at(19, 10), 'ScheduleApplies');
+await step('19:10, повернув як було', at(19, 10));
+showChange();
+
+todayDay().groups['4.1'] = 'y'.repeat(20) + 'nnnn';
+freeze(at(19, 40), 'ScheduleApplies');
+await step('19:40, нова зміна — вже окремим дописом', at(19, 40));
+showChange();
+
 // ДТЕК публікує графік на завтра: дописуємо день, як це зробило б дзеркало.
 live().days.push({
   date: new Date(today + 36 * 3600 * 1000).toISOString().slice(0, 10),
@@ -102,6 +133,7 @@ live().days.push({
 });
 freeze(at(20, 0), 'EmergencyShutdowns');
 await step('20:00, з\'явився графік на завтра', at(20, 0));
+showChange();
 console.log('\n' + plain(lastSchedule()).replace(/^/gm, '  │ '));
 
 freeze(at(22, 0), 'ScheduleApplies');
