@@ -16,6 +16,7 @@ const store = new Map();
 const chat = [];
 let nextId = 100;
 let actions = 0;
+let failEdit = null;
 
 globalThis.fetch = async (url, init) => {
   const target = String(url);
@@ -34,6 +35,15 @@ globalThis.fetch = async (url, init) => {
     else if (method === 'unpinChatMessage') log(`відкріплено #${body.message_id}`);
     else if (method === 'deleteMessage') log(`видалено #${body.message_id}`);
     else if (method === 'editMessageText') {
+      // Збої Telegram: мережа обірвалась або допис видалили руками.
+      if (failEdit === 'network') {
+        log(`не вдалось переписати #${body.message_id}: мережа`);
+        throw new TypeError('fetch failed');
+      }
+      if (failEdit === 'gone') {
+        log(`не вдалось переписати #${body.message_id}: допису нема`);
+        return { ok: false, status: 400, json: async () => ({ ok: false, error_code: 400, description: 'Bad Request: message to edit not found' }) };
+      }
       log(`тихо переписано #${body.message_id}`);
       const message = chat.find((m) => m.id === body.message_id);
       if (message) message.text = body.text;
@@ -124,6 +134,25 @@ todayDay().groups['4.1'] = 'y'.repeat(20) + 'nnnn';
 freeze(at(19, 40), 'ScheduleApplies');
 await step('19:40, нова зміна — вже окремим дописом', at(19, 40));
 showChange();
+
+// Telegram на хвилину недоступний якраз тоді, коли ДТЕК знову змінив години.
+failEdit = 'network';
+todayDay().groups['4.1'] = 'y'.repeat(21) + 'nnn';
+freeze(at(19, 45), 'ScheduleApplies');
+await step('19:45, збій мережі — нового закріпленого не має бути', at(19, 45));
+
+failEdit = null;
+freeze(at(19, 46), 'ScheduleApplies');
+await step('19:46, мережа ожила — переписуємо ті самі дописи', at(19, 46));
+showChange();
+
+failEdit = 'gone';
+freeze(at(19, 50), 'ScheduleApplies');
+await step('19:50, закріплене видалили руками', at(19, 50));
+
+failEdit = null;
+freeze(at(19, 51), 'ScheduleApplies');
+await step('19:51, новий закріплений замість видаленого', at(19, 51));
 
 // ДТЕК публікує графік на завтра: дописуємо день, як це зробило б дзеркало.
 live().days.push({

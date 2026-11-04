@@ -226,11 +226,41 @@ const render = (h, m, snap) => renderSchedule({ group: '4.1', snapshot: snap, ca
 const afternoon = render(16, 45, snapshot);
 expect('о 16:45 нічного 00:00–00:30 уже нема', afternoon.includes('00:00–00:30'), false);
 expect('о 16:45 вечірнє 17:00–20:30 є', afternoon.includes('17:00–20:30'), true);
-expect('частина дня позаду — «Ще без світла»', afternoon.includes('Ще без світла 3 години 30 хвилин'), true);
+expect('світло є — коли наступне відключення', afternoon.includes('💡 Наступне відключення о 17:00 (через 15 хвилин)'), true);
+expect('суми за день більше нема', /без світла \d/i.test(afternoon), false);
 
 const during = render(18, 0, withTomorrow);
 expect('о 18:00 відключення триває — сьогодні ще показуємо', during.includes('Сьогодні'), true);
-expect('…а «ще без світла» рахується від зараз: до 20:30 лишилось 2.5 год', during.includes('Ще без світла 2 години 30 хвилин'), true);
+expect(
+  '…і видно, коли увімкнуть',
+  during.includes('🔌 Зараз світла немає, за графіком увімкнуть о 20:30 (через 2 години 30 хвилин)'),
+  true
+);
+expect('у завтрашньому дні рядка «що зараз» нема', /Завтра[^]*(🔌|💡)/u.test(during), false);
+
+const renderAt = (h, m, todayCode, tomorrowCode) =>
+  renderSchedule({
+    group: '4.1',
+    snapshot: { ...snapshot, days: { '2026-10-14': todayCode, '2026-10-15': tomorrowCode } },
+    cache,
+    now: at(h, m),
+  });
+const lateOff = 'y'.repeat(21) + 'nnn';
+expect(
+  'відключення до 24:00 триває й після півночі — увімкнуть о 02:00',
+  renderAt(22, 0, lateOff, 'nn' + 'y'.repeat(22)).includes('увімкнуть о 02:00 (через 4 години)'),
+  true
+);
+expect(
+  'графіка на завтра нема — чесно 24:00',
+  renderAt(22, 0, lateOff, '-').includes('увімкнуть о 24:00 (через 2 години)'),
+  true
+);
+expect(
+  'зараз «можливо»',
+  renderAt(10, 0, 'y'.repeat(9) + 'mm' + 'y'.repeat(13), '-').includes('◌ Зараз можливе відключення, до 11:00'),
+  true
+);
 
 const lateWithTomorrow = render(21, 0, withTomorrow);
 expect('о 21:00 сьогодні все позаду, а завтра є — «Сьогодні» не показуємо', lateWithTomorrow.includes('Сьогодні'), false);
