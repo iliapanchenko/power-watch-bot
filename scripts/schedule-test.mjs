@@ -75,6 +75,27 @@ expect('переведення на літній: 10:00 = 07:00 UTC', new Date(k
 
 const days = [{ date: '2026-10-14', start: oct14, groups: { '4.1': code } }];
 const off = absoluteIntervals(days, '4.1');
+// 4–5 листопада: 22:00–24:00 і 00:00–03:00 — одне відключення через північ.
+const nov4 = Date.UTC(2026, 10, 3, 22);
+const nov5 = Date.UTC(2026, 10, 4, 22);
+const acrossMidnight = absoluteIntervals(
+  [
+    { date: '2026-11-04', start: nov4, groups: { '4.1': 'y'.repeat(22) + 'nn' } },
+    { date: '2026-11-05', start: nov5, groups: { '4.1': 'nnn' + 'y'.repeat(5) + 'nn' + 'y'.repeat(14) } },
+  ],
+  '4.1'
+);
+expect(
+  'відключення через північ склеюється в одне',
+  acrossMidnight.map((i) => [i.start, i.end]),
+  [[kyivLocalToMs(nov4, 22 * 60), kyivLocalToMs(nov5, 180)], [kyivLocalToMs(nov5, 480), kyivLocalToMs(nov5, 600)]]
+);
+expect(
+  'о 23:31 попереджати нема про що — світла й так нема',
+  dueWarnings(acrossMidnight, [String(kyivLocalToMs(nov4, 22 * 60))], kyivLocalToMs(nov4, 23 * 60 + 31)).length,
+  0
+);
+
 expect('абсолютні проміжки', off.map((i) => [new Date(i.start).toISOString().slice(11, 16), new Date(i.end).toISOString().slice(11, 16)]), [['21:00', '21:30'], ['14:00', '17:30']]);
 
 const at = (h, m = 0) => kyivLocalToMs(oct14, h * 60 + m);
