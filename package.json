@@ -9,7 +9,7 @@
     "deploy": "vercel deploy --prod"
   },
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   },
   "dependencies": {
     "@vercel/functions": "^3.9.3"
