@@ -25,6 +25,7 @@ import {
   scheduleSnapshot,
 } from '../lib/schedule.js';
 import { renderCause, renderScheduleSplit } from '../lib/messages.js';
+import { imageKey, pinnedImageRows, renderSchedulePng, renderScheduleSvg, weekday } from '../lib/schedule-image.js';
 
 let failures = 0;
 function expect(label, actual, expected) {
@@ -361,6 +362,37 @@ expect('без графіка — без рядка', renderScheduleSplit(3600, 
 expect('усе за графіком', renderScheduleSplit(3600, 3600), '↳ усе за графіком');
 expect('усе поза графіком', renderScheduleSplit(3600, 0), '↳ усе поза графіком');
 expect('порівну', renderScheduleSplit(7200, 3600), '↳ за графіком 1 годину, поза графіком 1 годину');
+
+// --- картинка ------------------------------------------------------------------
+
+expect('день тижня', [weekday('2026-11-09'), weekday('2026-11-15')], ['Пн', 'Нд']);
+
+const imageSnap = { today: '2026-11-09', tomorrow: '2026-11-10', phase: 'day', days: { '2026-11-09': code, '2026-11-10': '-' } };
+expect(
+  'удень на картинці сьогодні з рискою і завтра',
+  pinnedImageRows(imageSnap, 845),
+  [{ label: 'Пн', code, nowMinute: 845 }, { label: 'Вт', code: '-' }]
+);
+expect('з 23:45 — лише завтра', pinnedImageRows({ ...imageSnap, phase: 'evening' }, 1425), [{ label: 'Вт', code: '-' }]);
+
+const keyAt = (minute) => imageKey(pinnedImageRows(imageSnap, minute));
+expect('у межах пів години картинка та сама', keyAt(840) === keyAt(869), true);
+expect('нове пів години — нова картинка', keyAt(869) === keyAt(870), false);
+expect(
+  'змінились години — нова картинка',
+  keyAt(840) === imageKey(pinnedImageRows({ ...imageSnap, days: { ...imageSnap.days, '2026-11-09': 'y'.repeat(24) } }, 840)),
+  false
+);
+
+const svg = renderScheduleSvg([{ label: 'Пн', code: 'yyyyyyyynnnfyyyyyyyyyyyy', nowMinute: 600 }, { label: 'Вт', code: '-' }]);
+// 08–11 цілі години й перша половина 11-ї: 4 червоні прямокутники (п'ятий — у легенді).
+expect('години й половинка без світла', (svg.match(/fill="#e5533d"/g) ?? []).length - 1, 4);
+expect('неопублікований день — сірий з підписом', svg.includes('графік ще не опублікований'), true);
+expect('підписана кожна година', (svg.match(/text-anchor="middle" fill="#8e8e93">\d\d</g) ?? []).length, 23);
+expect('година «зараз» виділена', svg.includes('font-weight="700" text-anchor="middle" fill="#f2f2f7">10<'), true);
+
+const png = await renderSchedulePng([{ label: 'Пн', code: 'yyyyyyyynnnfyyyyyyyyyyyy', nowMinute: 600 }]);
+expect('PNG малюється зі шрифтом із репозиторію', png.subarray(1, 4).toString(), 'PNG');
 
 console.log(failures === 0 ? '\nВсе зійшлось.' : `\nПровалів: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

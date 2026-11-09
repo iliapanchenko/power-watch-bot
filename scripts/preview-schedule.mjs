@@ -4,8 +4,13 @@
  *
  *   node scripts/preview-schedule.mjs
  *
+ * З PREVIEW_PHOTOS=<тека> кожна надіслана картинка зберігається туди.
+ *
  * Потрібен інтернет: графік береться з того самого дзеркала, що й у бота.
  */
+
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 process.env.UPSTASH_REDIS_REST_URL = 'https://fake.upstash.io';
 process.env.UPSTASH_REDIS_REST_TOKEN = 'fake';
@@ -13,10 +18,33 @@ process.env.BOT_TOKEN = '1:fake';
 
 const realFetch = globalThis.fetch;
 const store = new Map();
-const chat = [];
+// Закріплений давно і забутий ботом — як той, що висів з 6 листопада.
+const chat = [{ id: 50, text: '<b>Графік відключень, група 4.1</b>\nзабутий' }];
+let pins = [50];
 let nextId = 100;
 let actions = 0;
 let failEdit = null;
+
+// Картинки складаються сюди, щоб їх можна було відкрити й подивитись.
+const PHOTOS = process.env.PREVIEW_PHOTOS ?? null;
+let photoCount = 0;
+function savePhoto(id, png) {
+  if (!PHOTOS) return '';
+  photoCount += 1;
+  const name = `${String(photoCount).padStart(2, '0')}-${clock.replace(':', '')}-#${id}.png`;
+  writeFileSync(join(PHOTOS, name), png);
+  return `→ ${name}`;
+}
+
+// Звичайні виклики — JSON, з картинкою — multipart.
+async function readBody(body) {
+  if (!(body instanceof FormData)) return JSON.parse(body);
+  const out = {};
+  for (const [key, value] of body) {
+    out[key] = typeof value === 'string' ? value : Buffer.from(await value.arrayBuffer());
+  }
+  return out;
+}
 
 globalThis.fetch = async (url, init) => {
   const target = String(url);
@@ -24,17 +52,40 @@ globalThis.fetch = async (url, init) => {
   if (target.includes('api.telegram.org')) {
     actions += 1;
     const method = target.split('/').pop();
-    const body = JSON.parse(init.body);
+    const body = await readBody(init.body);
     let result = true;
-    if (method === 'sendMessage') {
+    if (method === 'sendMessage' || method === 'sendPhoto') {
       result = { message_id: nextId++ };
-      chat.push({ id: result.message_id, text: body.text });
+      const text = body.text ?? body.caption;
+      chat.push({ id: result.message_id, text });
       const sound = body.disable_notification ? ' беззвучно' : '';
-      log(`надіслано${sound} #${result.message_id}` + (/^[⏰🚨✅🔄📅]/u.test(plain(body.text)) ? ': ' + plain(body.text).split('\n')[0] : ''));
-    } else if (method === 'pinChatMessage') log(`закріплено #${body.message_id}`);
-    else if (method === 'unpinChatMessage') log(`відкріплено #${body.message_id}`);
-    else if (method === 'deleteMessage') log(`видалено #${body.message_id}`);
-    else if (method === 'editMessageText') {
+      const photo = body.photo ? ` з картинкою ${savePhoto(result.message_id, body.photo)}` : '';
+      log(`надіслано${sound} #${result.message_id}${photo}` + (/^[⏰🚨✅🔄📅]/u.test(plain(text)) ? ': ' + plain(text).split('\n')[0] : ''));
+    } else if (method === 'pinChatMessage') {
+      pins.push(body.message_id);
+      log(`закріплено #${body.message_id}`);
+    } else if (method === 'unpinChatMessage') {
+      pins = pins.filter((id) => id !== body.message_id);
+      log(`відкріплено #${body.message_id}`);
+    } else if (method === 'deleteMessage') log(`видалено #${body.message_id}`);
+    else if (method === 'getChat') {
+      // Як і справжній Telegram: лише найсвіжіше закріплення.
+      const top = chat.find((m) => m.id === pins.at(-1));
+      result = top ? { id: body.chat_id, pinned_message: { message_id: top.id, caption: plain(top.text) } } : { id: body.chat_id };
+    }
+    else if (method === 'editMessageMedia' || method === 'editMessageCaption') {
+      const id = Number(body.message_id);
+      const caption = method === 'editMessageMedia' ? JSON.parse(body.media).caption : body.caption;
+      if (failEdit) log(`не вдалось переписати #${id}`);
+      if (failEdit === 'network') throw new TypeError('fetch failed');
+      if (failEdit === 'gone') {
+        return { ok: false, status: 400, json: async () => ({ ok: false, error_code: 400, description: 'Bad Request: message to edit not found' }) };
+      }
+      const message = chat.find((m) => m.id === id);
+      if (message) message.text = caption;
+      if (body.photo) log(`тихо замінено картинку #${id} ${savePhoto(id, body.photo)}`);
+      else log(`тихо переписано підпис #${id}`);
+    } else if (method === 'editMessageText') {
       // Збої Telegram: мережа обірвалась або допис видалили руками.
       if (failEdit === 'network') {
         log(`не вдалось переписати #${body.message_id}: мережа`);

@@ -25,7 +25,12 @@ export default async function handler(req, res) {
   const once = url.searchParams.get('once') === '1';
   const startedAt = Date.now();
 
-  if (!(await acquireLock(env.maxRunSeconds))) {
+  // Замок має пережити весь виклик, а не лише проходи: графіки йдуть уже
+  // після них. Із замком на maxRunSeconds останні секунди лишались
+  // незахищеними, і наступний виклик міг прочитати стан, який цей саме
+  // переписував. Звичайно замок знімається в кінці runCycle; запас — на
+  // випадок, коли Vercel обірве функцію і до зняття не дійде.
+  if (!(await acquireLock(env.maxRunSeconds + 20))) {
     // Попередній виклик ще працює — виходимо, він усе перевірить сам.
     res.status(200).json({ ok: true, skipped: 'already running' });
     return;
