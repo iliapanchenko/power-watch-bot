@@ -38,7 +38,9 @@ export default async function handler(req, res) {
  * сповіщення про відключення, це її рішення, і чіпати його не нам.
  */
 async function dropOwnPinNotice(message) {
-  const pinnedText = String(message.pinned_message.text ?? '');
+  // Закріплений графік — фото з підписом, тож його слова лежать у caption.
+  const pinned = message.pinned_message;
+  const pinnedText = String(pinned.text ?? pinned.caption ?? '');
   if (!pinnedText.startsWith('Графік відключень')) return;
 
   // Без права видаляти повідомлення рядок просто лишиться — не біда.
